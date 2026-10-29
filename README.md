@@ -1,6 +1,6 @@
-# Grindhouse LLC website
+# StumpRX website
 
-Static site for Grindhouse LLC (Pensacola, FL stump grinding and tree service).
+Static site for StumpRX (Pensacola, FL stump grinding and tree service).
 
 Design source (Figma): https://www.figma.com/design/PBGhXskhxDHO6zAewAvGK2
 
