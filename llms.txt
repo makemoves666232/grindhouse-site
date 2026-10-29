@@ -1,0 +1,13 @@
+# StumpsRx
+> Stump grinding and tree service for the Pensacola Beach, Florida 50-mile area.
+
+Primary phone: +1-949-870-0649. Site: https://stumpsrx.com/
+
+## Key pages
+- https://stumpsrx.com/
+- https://stumpsrx.com/service-area.html
+- https://stumpsrx.com/services/stump-grinding.html
+- https://stumpsrx.com/locations/pensacola.html
+
+## Note
+llms.txt is an optional emerging convention. It is not a Google ranking factor and does not replace robots.txt.

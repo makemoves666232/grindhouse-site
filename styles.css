@@ -92,3 +92,31 @@ figcaption{display:flex;align-items:center;gap:10px;font-size:.9rem;color:var(--
 .card-featured{grid-column:span 1}
 @media (max-width:1060px){.cards-6{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:560px){.cards-6{grid-template-columns:1fr}}
+
+/* sticky call bar + inner pages */
+.sticky-call{position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--forest);border-top:3px solid var(--accent);padding:10px 16px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;box-shadow:0 -8px 24px rgba(0,0,0,.25)}
+.sticky-call p{margin:0;color:#fff;font-weight:600;font-size:.95rem}
+.sticky-call .btn{padding:12px 22px}
+body{padding-bottom:78px}
+.mobile-call{display:none!important}
+.page-hero{background:var(--forest);color:#fff;padding:72px 0 56px}
+.page-hero h1{font-size:clamp(2.2rem,5vw,3.6rem);text-transform:uppercase;max-width:18ch}
+.page-hero .lead{opacity:.92;max-width:60ch}
+.breadcrumbs{font-size:.9rem;margin-bottom:18px;opacity:.75}
+.breadcrumbs a{color:#fff;text-decoration:none}
+.breadcrumbs a:hover{color:var(--accent)}
+.prose{max-width:760px}
+.prose h2{margin-top:1.6em}
+.prose ul{padding-left:1.2em;color:var(--muted)}
+.prose li{margin:.4em 0}
+.loc-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;list-style:none;padding:0;margin:0}
+.loc-grid a{display:block;background:var(--sand);border-left:4px solid var(--accent);padding:14px 16px;border-radius:8px;font-weight:700;text-decoration:none}
+.loc-grid a:hover{background:var(--sand-2)}
+.two-col{display:grid;grid-template-columns:1.2fr .8fr;gap:40px;align-items:start}
+.side-card{background:#fff;border-radius:var(--r);padding:24px;box-shadow:var(--shadow);position:sticky;top:90px}
+.side-card h3{margin-top:0}
+.side-card .btn{width:100%;margin-top:12px}
+.footer-nav{display:flex;flex-wrap:wrap;gap:10px 18px;margin:12px 0;font-size:.9rem}
+.footer-nav a{opacity:.85}.footer-nav a:hover{opacity:1;color:var(--accent)}
+@media (max-width:860px){.two-col{grid-template-columns:1fr}.side-card{position:static}.loc-grid{grid-template-columns:1fr 1fr}.sticky-call p{display:none}}
+@media (max-width:560px){.loc-grid{grid-template-columns:1fr}}
