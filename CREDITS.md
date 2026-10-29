@@ -1,6 +1,6 @@
 # Photo credits
 
-All photos are from Wikimedia Commons, licensed CC0, public domain, or CC BY (commercial use allowed without permission). None are taken from other companies' sites. They are example images and will be replaced with StumpRX job photos.
+All photos are from Wikimedia Commons, licensed CC0, public domain, or CC BY (commercial use allowed without permission). None are taken from other companies' sites. They are example images and will be replaced with StumpsRx job photos.
 
 | File | Used in | Author | License | Source |
 |---|---|---|---|---|

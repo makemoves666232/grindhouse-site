@@ -1,6 +1,6 @@
-# StumpRX website
+# StumpsRx website
 
-Static site for StumpRX (Pensacola, FL stump grinding and tree service).
+Static site for StumpsRx (Pensacola, FL stump grinding and tree service).
 
 Design source (Figma): https://www.figma.com/design/PBGhXskhxDHO6zAewAvGK2
 
