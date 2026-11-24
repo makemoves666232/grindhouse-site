@@ -1,10 +1,11 @@
 /* StumpsRx quote form helper. Plain JavaScript, no libraries.
    - Remembers how the visitor arrived: Google click ids, utm values, first page, first referrer.
    - Writes those into the hidden inputs of every quote form.
-   - On a valid submit: tells Tag Manager, sends a copy to the CRM, sets a one-time flag.
+   - On a valid submit: sends the request to the email service and to the CRM, tells Tag
+     Manager, sets a one-time flag, and takes the visitor to our own /thanks.html.
    - On /thanks.html: tells Tag Manager once, only if this browser just sent the form.
-   It never stops or delays the normal form post, and every storage or network step
-   is allowed to fail quietly. */
+   If neither copy is confirmed, or anything here breaks, the normal form post goes ahead,
+   so a request is never lost to a script problem. Storage steps may fail quietly. */
 (function () {
   'use strict';
 
@@ -30,7 +31,8 @@
     } catch (e) { return null; }
   }
   function writeJson(kind, key, value) {
-    try { var s = store(kind); if (s) { s.setItem(key, JSON.stringify(value)); } } catch (e) {}
+    try { var s = store(kind); if (s) { s.setItem(key, JSON.stringify(value)); return true; } } catch (e) {}
+    return false;
   }
   function remove(kind, key) {
     try { var s = store(kind); if (s) { s.removeItem(key); } } catch (e) {}
@@ -159,58 +161,180 @@
     } catch (e) {}
   }
 
-  function sendToCrm(form, data) {
+  function crmBody(form, data) {
+    var body = new URLSearchParams();
+    var name;
+    for (name in CAPS) {
+      if (Object.prototype.hasOwnProperty.call(CAPS, name)) { body.append(name, clip(field(form, name), CAPS[name])); }
+    }
+    body.append('page', data.page);
+    body.append('landing_page', data.landing_page);
+    body.append('referrer', data.referrer);
+    var i;
+    for (i = 0; i < CLICK_IDS.length; i++) { body.append(CLICK_IDS[i], data[CLICK_IDS[i]]); }
+    for (i = 0; i < UTMS.length; i++) { body.append(UTMS[i], data[UTMS[i]]); }
+    body.append('_honey', clip(field(form, '_honey'), 200));
+    return body;
+  }
+
+  /* Old browsers only: copy to the CRM without waiting, then let the normal form post go. */
+  function sendToCrmBlind(form, data) {
     try {
       if (typeof URLSearchParams !== 'function') { return; }
-      var body = new URLSearchParams();
-      var name;
-      for (name in CAPS) {
-        if (Object.prototype.hasOwnProperty.call(CAPS, name)) { body.append(name, clip(field(form, name), CAPS[name])); }
-      }
-      body.append('page', data.page);
-      body.append('landing_page', data.landing_page);
-      body.append('referrer', data.referrer);
-      var i;
-      for (i = 0; i < CLICK_IDS.length; i++) { body.append(CLICK_IDS[i], data[CLICK_IDS[i]]); }
-      for (i = 0; i < UTMS.length; i++) { body.append(UTMS[i], data[UTMS[i]]); }
-      body.append('_honey', clip(field(form, '_honey'), 200));
-
+      var body = crmBody(form, data);
       if (window.fetch && window.Request && 'keepalive' in window.Request.prototype) {
         window.fetch(CRM_URL, { method: 'POST', mode: 'no-cors', keepalive: true, body: body }).catch(function () {});
       } else if (navigator.sendBeacon) {
-        /* Older browsers drop a plain fetch when the page changes; a beacon is the same simple post. */
         navigator.sendBeacon(CRM_URL, body);
       }
     } catch (e) {}
   }
 
-  function onSubmit(event) {
+  /* Every named, switched-on field of the form except the redirect address, for the email copy. */
+  function emailFields(form) {
+    var out = {};
+    var els = form.elements;
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (!el.name || el.disabled || el.name === '_next') { continue; }
+      if (el.type === 'submit' || el.type === 'button') { continue; }
+      out[el.name] = el.value;
+    }
+    return out;
+  }
+
+  /* POST and read a JSON answer. Resolves with null on any failure or after `ms`. Never rejects. */
+  function postJson(url, options, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish(value) { if (!done) { done = true; clearTimeout(timer); resolve(value); } }
+      var timer = setTimeout(function () { finish(null); }, ms);
+      try {
+        window.fetch(url, options).then(function (res) {
+          return res.json().then(function (body) { finish({ ok: res.ok, body: body }); });
+        }).catch(function () { finish(null); });
+      } catch (e) { finish(null); }
+    });
+  }
+
+  /* Remember that this browser just sent the form, so the thanks page can count it once. */
+  function markSent(form, data, now) {
+    var phone = e164(field(form, 'phone'));
+    var email = field(form, 'email').replace(/^\s+|\s+$/g, '').toLowerCase();
+    pushEvent('quote_form_submit', {
+      form_page: data.page,
+      lead_phone: phone || undefined,
+      lead_email: email || undefined
+    });
+    return writeJson('sessionStorage', SENT_KEY, { t: now, phone: phone, email: email });
+  }
+
+  function setBusy(form, busy) {
     try {
-      var form = event.target;
+      var button = form.querySelector('button[type="submit"]');
+      if (!button) { return; }
+      if (busy) {
+        button.srxLabel = button.textContent;
+        button.textContent = 'Sending…';
+        button.disabled = true;
+      } else {
+        if (button.srxLabel) { button.textContent = button.srxLabel; }
+        button.disabled = false;
+      }
+    } catch (e) {}
+  }
+
+  function onSubmit(event) {
+    var form = event.target;
+    var took = false;      /* true once we have stopped the normal form post */
+    var leaving = false;   /* true once the visitor is being sent on */
+    try {
       if (!form || event.defaultPrevented) { return; }
       if (typeof form.checkValidity === 'function' && !form.checkValidity()) { return; }
       var now = new Date().getTime();
-      if (form.srxSentAt && now - form.srxSentAt < 5000) { return; }
-      form.srxSentAt = now;
-
       var data = attribution();
       fillHidden(form, data);
-      sendToCrm(form, data);
 
-      if (field(form, '_honey')) { return; }
-      var phone = e164(field(form, 'phone'));
-      var email = field(form, 'email').replace(/^\s+|\s+$/g, '').toLowerCase();
-      pushEvent('quote_form_submit', {
-        form_page: data.page,
-        lead_phone: phone || undefined,
-        lead_email: email || undefined
+      var action = form.getAttribute('action') || '';
+      var modern = window.fetch && window.Promise && typeof URLSearchParams === 'function' &&
+        /^https:\/\/formsubmit\.co\/[^\/?#]+$/.test(action);
+
+      if (!modern) {
+        /* Old browser: the normal form post carries the request; the form service sends the visitor on. */
+        if (form.srxSentAt && now - form.srxSentAt < 5000) { return; }
+        form.srxSentAt = now;
+        sendToCrmBlind(form, data);
+        if (!field(form, '_honey')) { markSent(form, data, now); }
+        return;
+      }
+
+      /* We send the request ourselves and take the visitor to our own thanks page, so the
+         visitor never lands on the form service's page and the thanks page always counts it. */
+      event.preventDefault();
+      if (form.srxBusy) { return; }
+      took = true;
+      form.srxBusy = true;
+      setBusy(form, true);
+
+      if (field(form, '_honey')) { leaving = true; window.location.assign('/thanks.html'); return; }
+
+      var emailJob = postJson(action.replace('formsubmit.co/', 'formsubmit.co/ajax/'), {
+        method: 'POST',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(emailFields(form))
+      }, 8000);
+      var crmJob = postJson(CRM_URL, { method: 'POST', keepalive: true, body: crmBody(form, data) }, 12000);
+
+      function thanks() {
+        if (leaving) { return; }
+        leaving = true;
+        var stored = markSent(form, data, now);
+        window.location.assign(stored ? '/thanks.html' : '/thanks.html#sent');
+      }
+      function fallBack() {
+        /* Neither copy was confirmed: hand over to the normal form post so the request is not lost. */
+        if (leaving) { return; }
+        leaving = true;
+        markSent(form, data, now);
+        setBusy(form, false);
+        form.srxBusy = false;
+        HTMLFormElement.prototype.submit.call(form);
+      }
+
+      emailJob.then(function (emailResult) {
+        var emailOk = !!(emailResult && emailResult.ok && emailResult.body && String(emailResult.body.success) === 'true');
+        if (emailOk) { thanks(); return; }
+        /* The email copy failed or timed out; go ahead only if the CRM confirms it has the request. */
+        crmJob.then(function (crmResult) {
+          var crmOk = !!(crmResult && crmResult.ok && crmResult.body && crmResult.body.ok === true);
+          if (crmOk) { thanks(); } else { fallBack(); }
+        });
       });
-      writeJson('sessionStorage', SENT_KEY, { t: now, phone: phone, email: email });
+    } catch (e) {
+      /* Something unexpected broke after we stopped the normal post: let the normal post go. */
+      if (took && !leaving) {
+        try { setBusy(form, false); form.srxBusy = false; HTMLFormElement.prototype.submit.call(form); } catch (e2) {}
+      }
+    }
+  }
+
+  /* Coming back with the browser's Back button restores the page as it was left: un-stick the button. */
+  function onPageShow(event) {
+    if (!event || !event.persisted) { return; }
+    try {
+      var forms = document.querySelectorAll('form[name="quote"]');
+      for (var i = 0; i < forms.length; i++) { forms[i].srxBusy = false; setBusy(forms[i], false); }
     } catch (e) {}
   }
 
   function thanksPage() {
     var sent = readJson('sessionStorage', SENT_KEY);
+    if (!sent && window.location.hash === '#sent') {
+      /* Storage was blocked on the form page; the address carries the one-time marker instead. */
+      sent = { t: new Date().getTime() };
+      try { window.history.replaceState(null, '', window.location.pathname); } catch (e) {}
+    }
     if (!sent) { return; }
     remove('sessionStorage', SENT_KEY);
     if (typeof sent.t !== 'number' || new Date().getTime() - sent.t > SENT_MAX_AGE) { return; }
@@ -229,6 +353,7 @@
         forms[i].addEventListener('submit', onSubmit);
       }
       if (/\/thanks(\.html)?$/.test(window.location.pathname)) { thanksPage(); }
+      window.addEventListener('pageshow', onPageShow);
     } catch (e) {}
   }
 
