@@ -217,6 +217,16 @@
     });
   }
 
+  /* The form service silently drops a normal form post that carries ad-click fields (seen in
+     testing on 2026-11-23), so the normal post goes without them. The CRM copy keeps them. */
+  function stripTracking(form) {
+    var names = ['landing_page', 'referrer'].concat(CLICK_IDS, UTMS);
+    for (var i = 0; i < names.length; i++) {
+      var el = form.querySelector('input[type="hidden"][name="' + names[i] + '"]');
+      if (el) { el.disabled = true; }
+    }
+  }
+
   /* Remember that this browser just sent the form, so the thanks page can count it once. */
   function markSent(form, data, now) {
     var phone = e164(field(form, 'phone'));
@@ -264,6 +274,7 @@
         if (form.srxSentAt && now - form.srxSentAt < 5000) { return; }
         form.srxSentAt = now;
         sendToCrmBlind(form, data);
+        stripTracking(form);
         if (!field(form, '_honey')) { markSent(form, data, now); }
         return;
       }
@@ -299,6 +310,7 @@
         markSent(form, data, now);
         setBusy(form, false);
         form.srxBusy = false;
+        stripTracking(form);
         HTMLFormElement.prototype.submit.call(form);
       }
 
@@ -314,7 +326,7 @@
     } catch (e) {
       /* Something unexpected broke after we stopped the normal post: let the normal post go. */
       if (took && !leaving) {
-        try { setBusy(form, false); form.srxBusy = false; HTMLFormElement.prototype.submit.call(form); } catch (e2) {}
+        try { setBusy(form, false); form.srxBusy = false; stripTracking(form); HTMLFormElement.prototype.submit.call(form); } catch (e2) {}
       }
     }
   }
